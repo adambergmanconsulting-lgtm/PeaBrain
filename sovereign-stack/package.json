@@ -1,0 +1,19 @@
+{
+  "name": "sovereign-stack",
+  "private": true,
+  "description": "NadirClaw + Ollama. Docker helpers mirror CVReady scripts/ensure-docker + compose patterns.",
+  "scripts": {
+    "docker:ensure": "node ./scripts/ensure-docker.js",
+    "stack:up": "node ./scripts/compose-up.js",
+    "stack:down": "node ./scripts/compose-up.js --profile public --profile ngrok down",
+    "stack:logs": "node ./scripts/compose-up.js logs -f",
+    "public:url": "node ./scripts/public-tunnel.js",
+    "public:url:logs": "node ./scripts/compose-up.js --profile public logs -f cloudflared",
+    "public:url:down": "node ./scripts/compose-up.js --profile public stop cloudflared",
+    "chat": "node ./scripts/chat-repl.mjs",
+    "chat:one": "node ./scripts/one-shot-chat.mjs",
+    "demo:open": "node ./scripts/open-demo.mjs",
+    "demo": "node ./scripts/open-demo.mjs",
+    "demo:sync": "node -e \"require('fs').copyFileSync('demo/index.html','nadirclaw/bundled_peabrain.html'); console.log('demo -> nadirclaw/bundled_peabrain.html');\""
+  }
+}

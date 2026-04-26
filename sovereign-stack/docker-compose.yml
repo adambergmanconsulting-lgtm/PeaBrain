@@ -1,0 +1,70 @@
+# NadirClaw + Ollama. Tailscale: install on the host, then e.g. `tailscale serve --bg 8765`
+# or reach this machine from your laptop by Tailscale IP. GPU (AMD): run Ollama on the
+# host with the official installer and set NADIR_LOCAL_BASE to that URL instead of this service.
+
+networks:
+  nadirclaw: {}
+
+volumes:
+  ollama_data: {}
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    # Bind only to localhost on the host if you do not need LAN access
+    # ports: ["127.0.0.1:11434:11434"]
+    networks: [nadirclaw]
+    # GPU passthrough: depends on your stack (NVIDIA, AMD+ROCm, etc.); see Ollama docs.
+    # Example for a typical NVIDIA + Compose v2 setup:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
+
+  nadir:
+    build: .
+    image: nadirclaw:local
+    restart: unless-stopped
+    depends_on: [ollama]
+    env_file:
+      - .env
+    environment:
+      NADIR_LOCAL_BASE: "http://ollama:11434/v1"
+      # Explicit path so the PeaBrain demo is found (also bind-mounted below)
+      NADIR_DEMO_INDEX: /app/demo/index.html
+    volumes:
+      - ./demo:/app/demo:ro
+    ports:
+      - "127.0.0.1:8765:8765"
+    networks: [nadirclaw]
+    # Optional: use host Tailscale IP / MagicDNS; nothing special required in the container.
+    # Optional (advanced): a Tailscale "sidecar" userspace container can be added; many
+    # operators instead run the Tailscale client on the host and bind Nadir to 127.0.0.1 (above).
+
+  # Ephemeral public HTTPS (trycloudflare). Start with: docker compose --profile public up -d cloudflared
+  # See README / CURSOR.md. Set NADIR_INBOUND_BEARER_TOKEN in .env when using a public URL.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: ["tunnel", "--no-autoupdate", "--url", "http://nadir:8765"]
+    depends_on: [nadir]
+    networks: [nadirclaw]
+    profiles: [public]
+    restart: unless-stopped
+    # Logs print the public URL, e.g.: trycloudflare.com/...
+    # docker compose --profile public logs -f cloudflared
+
+  # Optional stable tunnel with ngrok: set NGROK_AUTHTOKEN in .env, then
+  # docker compose --profile ngrok up -d ngrok
+  # docker compose --profile ngrok logs -f ngrok
+  ngrok:
+    image: ngrok/ngrok:latest
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
+    command: ["http", "http://nadir:8765", "--log=stdout", "--log-level=info"]
+    depends_on: [nadir]
+    networks: [nadirclaw]
+    profiles: [ngrok]
+    restart: unless-stopped

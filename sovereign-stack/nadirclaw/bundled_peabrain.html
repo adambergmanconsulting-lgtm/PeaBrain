@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PeaBrain — chat demo</title>
+    <style>
+      :root {
+        --bg: #0f1419;
+        --panel: #1a2332;
+        --text: #e7ecf3;
+        --muted: #8b9caf;
+        --accent: #6ee7a8;
+        --err: #f87171;
+        --border: #2d3a4d;
+        font-family: "Segoe UI", system-ui, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 1.25rem;
+      }
+      h1 {
+        font-size: 1.35rem;
+        font-weight: 600;
+        margin: 0 0 0.25rem;
+        letter-spacing: -0.02em;
+      }
+      .sub {
+        color: var(--muted);
+        font-size: 0.9rem;
+        margin-bottom: 1rem;
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.8rem;
+        color: var(--muted);
+        margin-bottom: 1rem;
+      }
+      .status .dot {
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 50%;
+        background: var(--muted);
+      }
+      .status.ok .dot {
+        background: var(--accent);
+        box-shadow: 0 0 8px var(--accent);
+      }
+      .status.bad .dot {
+        background: var(--err);
+      }
+      .chat {
+        width: 100%;
+        max-width: 40rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 20rem;
+        max-height: min(70vh, 32rem);
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      .msg {
+        max-width: 90%;
+        padding: 0.6rem 0.85rem;
+        border-radius: 10px;
+        font-size: 0.92rem;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .msg.user {
+        align-self: flex-end;
+        background: #243044;
+        border: 1px solid var(--border);
+      }
+      .msg.assistant {
+        align-self: flex-start;
+        background: #0d1826;
+        border: 1px solid #1e2d3f;
+      }
+      .row {
+        display: flex;
+        gap: 0.5rem;
+        padding: 0.75rem;
+        border-top: 1px solid var(--border);
+        background: #121c28;
+      }
+      .row input {
+        flex: 1;
+        background: #0a1018;
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 0.6rem 0.75rem;
+        border-radius: 8px;
+        font-size: 0.95rem;
+      }
+      .row input:focus {
+        outline: none;
+        border-color: #3d5a7d;
+      }
+      .row button {
+        background: #2d4a3e;
+        color: var(--accent);
+        border: 1px solid #3a6b58;
+        padding: 0.6rem 1rem;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        font-size: 0.9rem;
+      }
+      .row button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .msg.system {
+        align-self: center;
+        font-size: 0.8rem;
+        color: var(--muted);
+        background: transparent;
+        border: none;
+      }
+      .options {
+        width: 100%;
+        max-width: 40rem;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 0.8rem;
+        color: var(--muted);
+        margin-bottom: 0.5rem;
+      }
+      .options label {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        cursor: pointer;
+      }
+      .options input[type="password"] {
+        width: 100%;
+        max-width: 20rem;
+        background: #0a1018;
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 0.3rem 0.5rem;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        margin-top: 0.35rem;
+      }
+      details.tuning {
+        width: 100%;
+        max-width: 40rem;
+        font-size: 0.8rem;
+        color: var(--muted);
+        margin-top: 0.35rem;
+      }
+      details.tuning summary {
+        cursor: pointer;
+        user-select: none;
+        color: var(--accent);
+        font-weight: 500;
+      }
+      details.tuning .tuning-hint {
+        margin: 0.5rem 0 0.25rem;
+        line-height: 1.4;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>PeaBrain</h1>
+    <p class="sub">Local <code style="color: var(--accent)">Nadir</code> + <code style="color: var(--accent)">Ollama</code> — type a message and send. No setup beyond Docker unless you want extras below.</p>
+    <div class="options" id="options">
+      <label
+        ><input type="checkbox" id="useUrlFetch" checked />
+        <span>Include page text for <code>https://</code> links in my message</span></label
+      >
+      <label
+        ><input type="checkbox" id="useWeb" disabled />
+        <span>Web search (needs <code style="color: var(--accent)">NADIR_TAVILY_API_KEY</code> or Brave in <code style="color: var(--accent)">.env</code>)</span></label
+      >
+      <details class="tuning" id="tuning">
+        <summary>Advanced — public URL token, model tuning</summary>
+        <p class="tuning-hint">
+          <strong>Public tunnel</strong> (trycloudflare, etc.): paste the same value as
+          <code>NADIR_INBOUND_BEARER_TOKEN</code> (saved in this browser).<br />
+          <strong>Model tuning</strong> (optional): add to this page&rsquo;s URL, e.g.
+          <code>?temperature=0.55&max_tokens=1200&top_p=0.9</code>
+        </p>
+        <input
+          type="password"
+          id="bearer"
+          placeholder="Bearer token (only if Nadir requires it)"
+          title="NADIR_INBOUND_BEARER_TOKEN — for public base URL, not needed on 127.0.0.1/localhost with default settings"
+          autocomplete="off"
+          disabled
+        />
+      </details>
+    </div>
+    <div id="status" class="status" aria-live="polite">
+      <span class="dot"></span>
+      <span id="statusText">Checking…</span>
+    </div>
+    <div class="chat">
+      <div id="messages" class="messages" aria-live="polite"></div>
+      <form class="row" id="form">
+        <input
+          id="input"
+          type="text"
+          autocomplete="off"
+          placeholder="Ask something (optional: include https:// links)"
+          disabled
+        />
+        <button type="submit" id="send" disabled>Send</button>
+      </form>
+    </div>
+    <script>
+      (function () {
+        const API = "";
+        /* Persona + behavior (edit here). Nadir passes temperature / top_p / max_tokens to Ollama. */
+        const PEABRAIN = [
+          "You are PeaBrain. Sound like a person at the kitchen table, not a company memo. A little warmth and children's-book plainness is good — but stay short. No performative politeness, no padding, no chit-chat for its own sake. Curt when that fits; friendly always.",
+          "You are a small mind in a big world: say that when it helps. Use “I” where it is natural. Never talk down, never sound like a brochure.",
+          "When the user is not after code, answer in a few short sentences, plain language, no backticks or fences unless they clearly want something technical shown.",
+          "When they need code, configs, or a careful fix, use fenced blocks and be clear — still brief.",
+          "If the message has web or fetched page text, treat it as hints, not truth; it can be wrong. Say when you are unsure. Do not invent people, links, or citations; ask a tiny clarifying question instead of bluffing.",
+          "If you see a block labeled Fetched page or web search with actual text, use it to answer. Never reply with a generic I cannot open links or access websites when that text is right there — read it. If a line says the fetch failed or the page is empty, say so plainly: many sites (e.g. some weather pages) block server fetches. Do not make up todays temperature or conditions; say you could not get a live read and they can open the link on their device or use a weather app.",
+        ].join(" ");
+        /* Defaults: balanced for chat; override any time: ?temperature=0.5&max_tokens=1600&top_p=0.88 */
+        const qs = new URLSearchParams(typeof location !== "undefined" && location.search ? location.search : "");
+        function num(p, d) {
+          const v = qs.get(p);
+          if (v == null || v === "") return d;
+          const n = Number(v);
+          return Number.isFinite(n) ? n : d;
+        }
+        const sampling = {
+          temperature: num("temperature", 0.6),
+          top_p: num("top_p", 0.9),
+          frequency_penalty: num("frequency_penalty", 0),
+          presence_penalty: num("presence_penalty", 0),
+          max_tokens: Math.max(1, Math.floor(num("max_tokens", 1500))),
+        };
+        const topK = num("top_k", NaN);
+        if (Number.isFinite(topK)) sampling.top_k = Math.floor(topK);
+        const messages = [{ role: "system", content: PEABRAIN }];
+
+        const $messages = document.getElementById("messages");
+        const $status = document.getElementById("status");
+        const $statusText = document.getElementById("statusText");
+        const $input = document.getElementById("input");
+        const $send = document.getElementById("send");
+        const $form = document.getElementById("form");
+        const $useWeb = document.getElementById("useWeb");
+        const $useUrlFetch = document.getElementById("useUrlFetch");
+        const $bearer = document.getElementById("bearer");
+        const $options = document.getElementById("options");
+        const BEARER_LS = "peabrain_nadir_bearer";
+        if ($bearer) {
+          try {
+            const s = localStorage.getItem(BEARER_LS);
+            if (s) $bearer.value = s;
+          } catch (e) {
+            void e;
+          }
+          $bearer.addEventListener("input", function () {
+            try {
+              localStorage.setItem(BEARER_LS, $bearer.value);
+            } catch (e) {
+              void e;
+            }
+          });
+        }
+
+        function authHeaders(ctype) {
+          const h = {};
+          if (ctype) h["Content-Type"] = ctype;
+          const t = ($bearer && $bearer.value && $bearer.value.trim()) || "";
+          if (t) h["Authorization"] = "Bearer " + t;
+          return h;
+        }
+
+        function parseUrls(s) {
+          if (!s) return [];
+          const re = /https?:\/\/[^\s<>"'()[\],;]+/gi;
+          const m = s.match(re) || [];
+          const out = [];
+          for (const raw of m) {
+            let u = String(raw);
+            while (u && /[.,;:!?)\]'"»]+$/.test(u)) u = u.slice(0, -1);
+            if (u && out.indexOf(u) < 0) {
+              out.push(u);
+            }
+            if (out.length >= 3) break;
+          }
+          return out;
+        }
+
+        function esc(s) {
+          const d = document.createElement("div");
+          d.textContent = s;
+          return d.innerHTML;
+        }
+
+        function addBubble(role, text) {
+          const d = document.createElement("div");
+          d.className = "msg " + role;
+          d.innerHTML = esc(text);
+          $messages.appendChild(d);
+          $messages.scrollTop = $messages.scrollHeight;
+        }
+
+        function addSystem(text) {
+          const d = document.createElement("div");
+          d.className = "msg system";
+          d.textContent = text;
+          $messages.appendChild(d);
+        }
+
+        async function checkHealth() {
+          try {
+            const r = await fetch(API + "/health", { headers: authHeaders(false) });
+            if (r.ok) {
+              $status.classList.add("ok");
+              $status.classList.remove("bad");
+              $statusText.textContent = "Nadir is up";
+              $input.disabled = false;
+              $send.disabled = false;
+              if ($bearer) $bearer.disabled = false;
+              $input.focus();
+              try {
+                const cr = await fetch(API + "/api/demo/web-search/config");
+                if (cr.ok) {
+                  const cj = await cr.json();
+                  if (cj && cj.configured) {
+                    $useWeb.disabled = false;
+                    $useWeb.title = cj.provider ? "Uses Nadir " + cj.provider + " (server keys)" : "";
+                  } else {
+                    $useWeb.disabled = true;
+                    $useWeb.title = "Set NADIR_TAVILY_API_KEY or NADIR_BRAVE_SEARCH_API_KEY in .env and restart Nadir";
+                  }
+                }
+              } catch {
+                void 0;
+              }
+            } else {
+              throw new Error("bad status");
+            }
+          } catch {
+            $status.classList.add("bad");
+            $status.classList.remove("ok");
+            $statusText.textContent = "Cannot reach Nadir (is Docker up?)";
+          }
+        }
+
+        async function send() {
+          const t = $input.value.trim();
+          if (!t) return;
+          $input.value = "";
+          addBubble("user", t);
+          $send.disabled = true;
+          $input.disabled = true;
+          addSystem("…");
+          const pending = $messages.lastChild;
+          const partBlocks = [];
+          let userContent = t;
+
+          try {
+            if ($useWeb && $useWeb.checked) {
+              pending.textContent = "Searching the web…";
+              const sr = await fetch(API + "/api/demo/web-search", {
+                method: "POST",
+                headers: authHeaders("application/json"),
+                body: JSON.stringify({ q: t }),
+              });
+              const sraw = await sr.text();
+              if (!sr.ok) {
+                let err = sraw;
+                try {
+                  const ej = JSON.parse(sraw);
+                  if (ej && ej.error) err = ej.error;
+                } catch (e) {
+                  void e;
+                }
+                pending.remove();
+                let werr = "Web search failed (HTTP " + sr.status + "): " + err.slice(0, 600);
+                if (sr.status === 401) {
+                  werr +=
+                    "\n\nIf you use a public URL, open the Advanced section below and paste the same value as NADIR_INBOUND_BEARER_TOKEN (saved in this browser).";
+                }
+                addBubble("assistant", werr);
+                $send.disabled = false;
+                $input.disabled = false;
+                $input.focus();
+                return;
+              }
+              const sj = JSON.parse(sraw);
+              if (!sj.ok || !sj.text) {
+                pending.remove();
+                addBubble("assistant", "Web search returned no text.");
+                $send.disabled = false;
+                $input.disabled = false;
+                $input.focus();
+                return;
+              }
+              partBlocks.push("### Web search (snippets)\n" + sj.text);
+            }
+            if ($useUrlFetch && $useUrlFetch.checked) {
+              const urls = parseUrls(t);
+              if (urls.length) {
+                pending.textContent = partBlocks.length
+                  ? "Loading page text from URLs…"
+                  : "Loading page text from URLs…";
+                for (let i = 0; i < urls.length; i++) {
+                  const u = urls[i];
+                  pending.textContent = "Loading page " + (i + 1) + "/" + urls.length + "…";
+                  const fr = await fetch(API + "/api/demo/fetch-url", {
+                    method: "POST",
+                    headers: authHeaders("application/json"),
+                    body: JSON.stringify({ url: u }),
+                  });
+                  const ftext = await fr.text();
+                  if (!fr.ok) {
+                    let errm = ftext;
+                    try {
+                      const ex = JSON.parse(ftext);
+                      if (ex && ex.error) errm = ex.error;
+                    } catch (e) {
+                      void e;
+                    }
+                    partBlocks.push("### " + u + " (failed)\n" + errm);
+                  } else {
+                    const fj = JSON.parse(ftext);
+                    if (fj && fj.ok && fj.text) {
+                      partBlocks.push("### Fetched page: " + u + "\n" + fj.text);
+                    } else {
+                      partBlocks.push("### " + u + " (no text)\n" + ftext);
+                    }
+                  }
+                }
+              }
+            }
+            if (partBlocks.length) {
+              userContent = partBlocks.join("\n\n---\n\n") + "\n\n---\n\nUser message:\n" + t;
+            }
+            pending.textContent = "…";
+            messages.push({ role: "user", content: userContent });
+            const body = {
+              model: "nadir",
+              stream: false,
+              messages: messages,
+              ...sampling,
+              nadir: {
+                lines: 200,
+                multi_file: false,
+                complex: false,
+              },
+            };
+            const r = await fetch(API + "/v1/chat/completions", {
+              method: "POST",
+              headers: authHeaders("application/json"),
+              body: JSON.stringify(body),
+            });
+            const raw = await r.text();
+            pending.remove();
+            if (!r.ok) {
+              let errText = "Error " + r.status + ": " + raw.slice(0, 500);
+              if (r.status === 401) {
+                errText +=
+                  "\n\nOpen Advanced (below) and paste the same value as NADIR_INBOUND_BEARER_TOKEN in the token field (saved in this browser).";
+              }
+              addBubble("assistant", errText);
+              messages.pop();
+              $send.disabled = false;
+              $input.disabled = false;
+              $input.focus();
+              return;
+            }
+            const j = JSON.parse(raw);
+            const c = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+            if (c == null) {
+              addBubble("assistant", raw.slice(0, 800));
+            } else {
+              messages.push({ role: "assistant", content: c });
+              addBubble("assistant", c);
+            }
+          } catch (e) {
+            pending.remove();
+            addBubble("assistant", String(e && e.message ? e.message : e));
+            if (messages.length && messages[messages.length - 1].role === "user") {
+              messages.pop();
+            }
+          }
+          $send.disabled = false;
+          $input.disabled = false;
+          $input.focus();
+        }
+
+        $form.addEventListener("submit", function (e) {
+          e.preventDefault();
+          send();
+        });
+        $input.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            send();
+          }
+        });
+
+        addBubble(
+          "assistant",
+          "Hi — I’m PeaBrain. Type a message; https links are expanded automatically (you can turn that off with the first checkbox). Open “Advanced” only for a public-URL token or model tuning in the page URL."
+        );
+        checkHealth();
+      })();
+    </script>
+  </body>
+</html>
